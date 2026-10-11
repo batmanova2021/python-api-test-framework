@@ -8,5 +8,6 @@ def test_validate_get_response_code(rick_and_morty_api):
     assert res.status_code == 200
     assert res.headers["Content-Type"].split(";")[0] == "application/json"
     json_data = res.json()
-    assert json_data["info"]["count"] == 26
-    assert json_data["info"]["pages"] == 2
+    # Assert structure, not exact values — the dataset grows as new episodes air
+    assert json_data["info"]["count"] > 0
+    assert json_data["info"]["pages"] >= 1
