@@ -1,19 +1,21 @@
-import requests
 import pytest
 
+pytestmark = pytest.mark.jsonplaceholdertest
 
-@pytest.mark.jsonplaceholdertest
-def test_validate_response_code():
-    response = requests.get('https://jsonplaceholder.typicode.com/posts')
+
+@pytest.mark.smoke
+def test_validate_response_code(jsonplaceholder_api):
+    response = jsonplaceholder_api.get("/posts")
     assert response.status_code == 200
-    assert 'application/json; charset=utf-8' in response.headers["Content-Type"]
+    assert response.headers["Content-Type"].split(";")[0] == "application/json"
 
 
-@pytest.mark.jsonplaceholdertest
-def test_validate_userid_and_id():
-    response = requests.get('https://jsonplaceholder.typicode.com/posts')
+@pytest.mark.regression
+def test_validate_userid_and_id(jsonplaceholder_api, validate_schema):
+    response = jsonplaceholder_api.get("/posts")
     assert response.status_code == 200
-    assert 'application/json; charset=utf-8' in response.headers["Content-Type"]
+    assert response.headers["Content-Type"].split(";")[0] == "application/json"
     data = response.json()
-    assert data[0]['userId'] == 1
-    assert data[0]['id'] == 1
+    validate_schema(data, "posts_list_schema.json")
+    assert data[0]["userId"] == 1
+    assert data[0]["id"] == 1

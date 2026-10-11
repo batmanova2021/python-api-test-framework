@@ -1,0 +1,80 @@
+name: API Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Test suite to run
+        type: choice
+        default: smoke
+        options: [smoke, regression, all]
+
+permissions:
+  contents: read
+
+env:
+  JSONPLACEHOLDER_BASE_URL: ${{ vars.JSONPLACEHOLDER_BASE_URL || 'https://jsonplaceholder.typicode.com' }}
+  RICK_AND_MORTY_BASE_URL: ${{ vars.RICK_AND_MORTY_BASE_URL || 'https://rickandmortyapi.com/api' }}
+  API_TIMEOUT: ${{ vars.API_TIMEOUT || '10' }}
+
+jobs:
+  quality:
+    name: Lint, types, and framework tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9
+        with:
+          version: "0.12.17"
+          enable-cache: true
+      - run: uv python install
+      - run: uv sync --locked
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked pylint tests/ config/ --fail-under=8.0
+      - run: uv run --locked mypy
+      - run: uv run --locked pytest -m unit
+
+  api-tests:
+    name: API suite
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9
+        with:
+          version: "0.12.17"
+          enable-cache: true
+      - run: uv python install
+      - run: uv sync --locked
+      - name: Run smoke tests
+        if: github.event_name == 'pull_request' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'smoke')
+        run: uv run --locked pytest -m smoke --junitxml=test-results.xml
+      - name: Run regression tests
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'regression')
+        run: uv run --locked pytest -m regression --junitxml=test-results.xml
+      - name: Run all API tests
+        if: github.event_name == 'workflow_dispatch' && inputs.suite == 'all'
+        run: uv run --locked pytest -m "smoke or regression" --junitxml=test-results.xml
+      - name: Generate Allure HTML report
+        if: always()
+        run: |
+          npm install --global allure-commandline@2.34.1
+          allure generate allure-results --clean -o allure-report
+      - name: Upload test results and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-report
+          path: |
+            allure-results/
+            allure-report/
+            test-results.xml
+          retention-days: 14
